@@ -1,32 +1,85 @@
 #!/usr/bin/python3
-import numpy as np
-import socket, math
+# import numpy as np
+import select
+import socket
+# import sys
+import Queue
+# import math
 
-class Bone:
-    def __init__ (self, x1, y1, z1, x2, y2, z2):
-        self.location = np.array([(x1, y1, z1), (x2, y2, z2)])
-        self.line = np.zeros( (1, 3) )
 
-    def getDirection (self):
-        self.line = self.location[1] - self.location[0]
+class MPU6050:
 
-class Hand:
-    def __init__ (self):
-        self.start = np.zeros( (1, 3) )
-        self.location = self.start
+    def __init__(self, x, y, z, ax, ay, az):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.ax = ax
+        self.ay = ay
+        self.az = az
 
-    def calculateMove (self, foreArm, upperArm):
-        pass
-        # TODO: calculate the new directions and movements of the bones
+    def set(self, x, y, z, ax, ay, az):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.ax = ax
+        self.ay = ay
+        self.az = az
+
+    def get(self):
+        return [self.x, self.y, self.z, self.ax, self.ay, self.az]
+
 
 def main():
-    hand = Hand()
-    forearm = Bone(0, -3, 0, 0, -33, 0)
-    upperarm = Bone(0, -33, 0, 0, -63, 0)
-    
 
-    while True:
-        pass
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setblocking(0)
+
+    host = socket.gethostname()
+    port = 9502
+
+    print("starting tcp server on {}:{}".format(host, port))
+    srv.bind((host, port))
+
+    srv.listen(2)
+
+    inputs = [srv]
+    outputs = []
+    messageQueues = {}
+    while inputs:
+        readable, writable, exceptional = select.select(inputs, outputs, inputs)
+    for s in readable:
+        if s is srv:
+            connection, client_address = s.accept()
+            connection.setblocking(0)
+            inputs.append(connection)
+            messageQueues[connection] = Queue.Queue()
+        else:
+            data = s.recv(1024)
+            if data:
+                messageQueues[s].put(data)
+                if s not in outputs:
+                    outputs.append(s)
+            else:
+                if s in outputs:
+                    outputs.remove(s)
+                inputs.remove(s)
+                s.close()
+                del messageQueues[s]
+
+    for s in writable:
+        try:
+            next_msg = messageQueues[s].get_nowait()
+        except Queue.Empty:
+            outputs.remove(s)
+        else:
+            s.send(next_msg)
+
+    for s in exceptional:
+        inputs.remove(s)
+        if s in outputs:
+            outputs.remove(s)
+        s.close()
+        del messageQueues[s]
 
 
 main()
