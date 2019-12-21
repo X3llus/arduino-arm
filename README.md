@@ -1,5 +1,7 @@
 # arduino-arm
 
+This is still a WIP, currently on hold for school but might continue during summer depending on coop
+
 Sudo Code
 ---------
 connect to devices
